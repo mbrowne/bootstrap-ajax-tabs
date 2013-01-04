@@ -2,17 +2,32 @@
 
   "use strict"; // jshint ;_;
 
-	var Tab = $.fn.tab.Constructor;
+	//To change these defaults, call $('[data-toggle="ajax-tab"]').ajaxTab('option', 'key', 'new value')
+	var defaults = {
+			//cacheResponse: Whether to cache the HTML retrieved for tab content, in case the same tab is clicked again
+			// Not to be confused with the cache option passed to $.ajax, which only works if the headers from the server
+			//	allow caching. This is in-memory caching of the HTML returned
+			cacheResponse: true
+		},
+		requestPendingFor = [];
+	
+	
+	var Tab = $.fn.tab.Constructor
 
 	//Inherit from base Tab class
 	function AjaxTab(element) {
 		Tab.call(this, element);
-		this.showEventBound = false;		
+		this.showEventBound = false;
+		this.options = $.extend(true, {}, defaults);
 	}
 	AjaxTab.prototype = new Tab();
 	
 	$.extend(AjaxTab.prototype, {
 		constructor: AjaxTab,
+		
+		option: function(key, val) {
+			this.options[key] = val;
+		},
 		
 		show: function() {			
 			//This code is here in case this method is called directly on an element that didn't have data-toggle set to ajax-tab or ajax-pill
@@ -26,8 +41,29 @@
 		loadAjaxContent: function($target, url, $ul) {
 			var self = this
 			  , $this = this.element	
-			  , previousTab = $ul.find('.active:last a')[0]
-			  
+			  , previousTab = $ul.find('.active:last a')[0];
+			
+			var activateTab = function() {
+				self.activate($this.parent('li'), $ul)
+				self.activate($target, $target.parent(), function () {
+					$this.trigger({
+						type: 'shown'
+					, relatedTarget: previousTab
+					})
+				});
+			}
+			
+			if (self.options.cacheResponse) {				
+				if ($target.html() != '') {
+					activateTab()
+					return					
+				}
+			}
+			
+			//prevent simultaneous AJAX requests for the same URL
+			if (requestPendingFor[url]) return
+			requestPendingFor[url] = true
+			
 			$.get(url)
 				.then(function(html) {
 					$target.html(html)
@@ -42,13 +78,8 @@
 					}
 				})
 				.always(function() {
-					self.activate($this.parent('li'), $ul)
-					self.activate($target, $target.parent(), function () {
-						$this.trigger({
-							type: 'shown'
-						, relatedTarget: previousTab
-						})
-					});
+					activateTab()
+					requestPendingFor[url] = false
 				})
 		}
 	});
@@ -56,7 +87,6 @@
 	//This method is declared here rather than on the prototype to avoid confusion, because its "this" variable points to the element
 	//and not the AjaxTab instance
 	AjaxTab.onShowHandler = function(e) {
-		//log('show')
 		var $this = $(this)
 		  , selector = $this.attr('data-target')
 		  , $target
@@ -68,9 +98,16 @@
 		else {
 			//container div for tab content
 			var $tabContentContainer = $( $ul.attr('data-tab-content') ),
-			    tabNum = $this.parent().children().index(this);
+				 $topLevelTabLi,
+			    tabIdx; // = $ul.children().index( $this.parent() );
 			
-			$target = $tabContentContainer.children().eq(tabNum);
+			if ($this.closest('ul').hasClass('dropdown-menu')) {
+				$topLevelTabLi = $this.closest('li:not(.dropdown)')
+			}
+			else $topLevelTabLi = $this.parent()
+			
+			tabIdx = $ul.children().index( $topLevelTabLi )
+			$target = $tabContentContainer.children().eq(tabIdx)
 		}
 		
 		$this.data('ajaxTab').loadAjaxContent($target, $this.attr('href'), $ul);
@@ -87,18 +124,18 @@
 				, ajaxTab = $this.data('ajaxTab')
 				
 			if (!ajaxTab) $this.data('ajaxTab', (ajaxTab = new AjaxTab(this)));
-			if (typeof method == 'string') ajaxTab[method]();
+			if (typeof method == 'string') ajaxTab[method].apply(ajaxTab, Array.prototype.slice.call(args, 1));
 		});
 	}
 	
 	$.fn.ajaxTab.Constructor = AjaxTab;
 	
+	/* AJAXTAB DATA-API
+		* ================ */
 	
-  /* AJAXTAB DATA-API
-	* ================ */
-  
-	$('[data-toggle="ajax-tab"], [data-toggle="ajax-pill"]')
-		.on('click.ajaxTab.data-api', function (e) {
+	var selector = '[data-toggle="ajax-tab"], [data-toggle="ajax-pill"]';
+	$(document)
+		.on('click.ajaxTab.data-api', selector, function (e) {
 			e.preventDefault()
 			var $this = $(this)
 			//We set a flag to designate that the 'show' event has been bound to AjaxTab.onShowHandler 
@@ -106,33 +143,40 @@
 			ajaxTab.showEventBound = true;
 			ajaxTab.show();
 		})
-		.on('show', AjaxTab.onShowHandler)
+		.on('show', selector, AjaxTab.onShowHandler)
 		//.on('tabAjaxError', function() {return true})
-  
-  //Show initial content for the tab with the "active" class, or the first tab if no tabs have the "active" class
-  //
-  //NOTE: If you have created separate elements for each tab inside your tab-content container,
-  //and they have an "active" class, it will be ignored.
-  //Set the "active" class on the link to that tab instead.
-  //
-  $('.nav-tabs, .nav-pills').each(function() {
-	  //First, create content divs if they don't already exist
-	  var $tabContentContainer = $($(this).attr('data-tab-content'))
-	  if ($tabContentContainer.children().length == 0) {
-		  var $contentTpl = $('<div class="tab-pane fade" />');
-		  for (var i=0; i < $(this).children().length; i++) {
-			  $tabContentContainer.append($contentTpl.clone());
-		  }
-	  }
-	  
-	  var $activeTab = $(this).find('li .active');
-	  if ($activeTab.length == 0) $activeTab = $(this).find(':first a');
-	  
-	  var dataToggle = $activeTab.attr('data-toggle');
-	  if (dataToggle=='ajax-tab' || dataToggle=='ajax-pill') {
-		  $activeTab.ajaxTab().data('ajaxTab').showEventBound = true;
-	  }
-	  $activeTab.ajaxTab('show');
-  })
+	
+	$().ready(function() {
+		//Show initial content for the tab with the "active" class, or the first tab if no tabs have the "active" class
+		//
+		//NOTE: If you have created separate elements for each tab inside your tab-content container,
+		//and they have an "active" class, it will be ignored.
+		//Set the "active" class on the link to that tab instead.
+		//
+
+		$('.nav-tabs, .nav-pills').each(function() {
+			//First, create content divs if they don't already exist
+			//
+			//This approach (separate div for each tab pane) should theoretically allow for crossfades,
+			//although they're not currently implemented.
+			//The cacheResponse option also depends on there being a separate div for each tab pane
+			var $tabContentContainer = $($(this).attr('data-tab-content'))
+			if ($tabContentContainer.children().length == 0) {
+				var $contentTpl = $('<div class="tab-pane fade" />');
+				for (var i=0; i < $(this).children().length; i++) {
+					$tabContentContainer.append($contentTpl.clone());
+				}
+			}
+
+			var $activeTab = $(this).find('li .active');
+			if ($activeTab.length == 0) $activeTab = $(this).find(':first a');
+
+			var dataToggle = $activeTab.attr('data-toggle');
+			if (dataToggle=='ajax-tab' || dataToggle=='ajax-pill') {
+				$activeTab.ajaxTab().data('ajaxTab').showEventBound = true;
+			}
+			$activeTab.ajaxTab('show');
+		})
+	});
 
 }(window.jQuery));
