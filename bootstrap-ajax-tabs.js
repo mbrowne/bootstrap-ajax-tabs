@@ -69,6 +69,14 @@
 			}
 			
 			if (url[0]=='#') {
+				var selector = url;
+				//If the target ID is different than the ID pointed to by the href,
+				//update the HTML of the target to equal the HTML of the element indicated by the href.
+				//This behavior is different from Bootstrap's base tabs implementation; we do it so
+				//the behavior is consistent regardless of whether the link is an ajax link or not
+				if (selector.indexOf($target[0].id) != 1) {
+					$target.html( $(selector).html() )
+				}
 				activateTab()
 				return
 			}
@@ -110,29 +118,42 @@
 	//and not the AjaxTab instance
 	AjaxTab.onShowHandler = function(e) {
 		var $this = $(this)
+		  , url
 		  , selector = $this.attr('data-target')
 		  , $target
 		  , $ul = $this.closest('ul:not(.dropdown-menu)');
 			 
 		e.preventDefault();
 			 
-		if (selector) $target = $(selector);
-		else {
-			//container div for tab content
-			var $tabContentContainer = $( $ul.attr('data-tab-content') ),
-				 $topLevelTabLi,
-			    tabIdx; // = $ul.children().index( $this.parent() );
-			
-			if ($this.closest('ul').hasClass('dropdown-menu')) {
-				$topLevelTabLi = $this.closest('li:not(.dropdown)')
+		url = $this.attr('href')
+			 
+		if (selector) {
+			$target = $(selector);
+		}
+		else {			
+			if (url[0]=='#') {
+				selector = url.replace(/.*(?=#[^\s]*$)/, '') //strip for ie7
+				$target = $(selector)
 			}
-			else $topLevelTabLi = $this.parent()
 			
-			tabIdx = $ul.children().index( $topLevelTabLi )
-			$target = $tabContentContainer.children().eq(tabIdx)
+			//If the target hasn't been found so far, make it the pane with the index corresponding to the tab index
+			if (!$target || $target.length==0) {
+				//container div for tab content
+				var $tabContentContainer = $( $ul.attr('data-tab-content') ),
+					$topLevelTabLi,
+					tabIdx; // = $ul.children().index( $this.parent() );
+
+				if ($this.closest('ul').hasClass('dropdown-menu')) {
+					$topLevelTabLi = $this.closest('li:not(.dropdown)')
+				}
+				else $topLevelTabLi = $this.parent()
+
+				tabIdx = $ul.children().index( $topLevelTabLi )
+				$target = $tabContentContainer.children().eq(tabIdx)
+			}
 		}
 		
-		$this.data('ajaxTab').loadAjaxContent($target, $this.attr('href'), $ul);
+		$this.data('ajaxTab').loadAjaxContent($target, url, $ul);
 	}
 
 
