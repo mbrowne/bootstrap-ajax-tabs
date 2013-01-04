@@ -29,22 +29,39 @@
 			this.options[key] = val;
 		},
 		
-		show: function() {			
+		//@param isFirstShowOfDefaultTab bool	Whether this is the first time the initially-visible tab is being displayed
+		show: function(isFirstShowOfDefaultTab) {			
 			//This code is here in case this method is called directly on an element that didn't have data-toggle set to ajax-tab or ajax-pill
 			if (!this.showEventBound) {
 				$(this.element).on('show', AjaxTab.onShowHandler);
 				this.showEventBound = true;
-			}	
+			}
+			this.isFirstShowOfDefaultTab = isFirstShowOfDefaultTab
+			
 			Tab.prototype.show.call(this);
 		},
 		
 		loadAjaxContent: function($target, url, $ul) {
 			var self = this
 			  , $this = this.element	
-			  , previousTab = $ul.find('.active:last a')[0];
+			  , previousTab = $ul.find('.active:last a')[0]
+			  , callback;
 			
 			var activateTab = function() {
 				self.activate($this.parent('li'), $ul)
+//				if (! self.isFirstShowOfDefaultTab) {
+//					callback = function () {
+//						$this.trigger({
+//							type: 'shown'
+//						, relatedTarget: previousTab
+//						})
+//					}
+//				}
+//				else {
+//					//callback = function() {}
+//					callback = undefined
+//				}
+				
 				self.activate($target, $target.parent(), function () {
 					$this.trigger({
 						type: 'shown'
@@ -53,8 +70,10 @@
 				});
 			}
 			
-			if (self.options.cacheResponse) {				
-				if ($target.html() != '') {
+			if (self.options.cacheResponse) {
+				var trimmedHtml = $target.html().trim();
+				//make sure there's some real HTML, not just comments
+				if (trimmedHtml != '' && trimmedHtml.indexOf('<!--')!=0 )  {
 					activateTab()
 					return					
 				}
@@ -153,7 +172,6 @@
 		//and they have an "active" class, it will be ignored.
 		//Set the "active" class on the link to that tab instead.
 		//
-
 		$('.nav-tabs, .nav-pills').each(function() {
 			//First, create content divs if they don't already exist
 			//
@@ -164,7 +182,10 @@
 			if ($tabContentContainer.children().length == 0) {
 				var $contentTpl = $('<div class="tab-pane fade" />');
 				for (var i=0; i < $(this).children().length; i++) {
-					$tabContentContainer.append($contentTpl.clone());
+					var $content = $contentTpl.clone()
+					if (i==0) $content.addClass('in active')
+					//if (i==0) $content.addClass('active')
+					$tabContentContainer.append($content);
 				}
 			}
 
@@ -175,7 +196,7 @@
 			if (dataToggle=='ajax-tab' || dataToggle=='ajax-pill') {
 				$activeTab.ajaxTab().data('ajaxTab').showEventBound = true;
 			}
-			$activeTab.ajaxTab('show');
+			$activeTab.ajaxTab('show', false);
 		})
 	});
 
