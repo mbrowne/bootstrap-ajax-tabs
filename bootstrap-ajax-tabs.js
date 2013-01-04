@@ -1,3 +1,10 @@
+//Plugin for tabs to allow content to be loaded via AJAX
+//
+//Also might be of interest - in consideration for development:
+//A plugin to allow to link to a particular tab.
+//In the meantime, see:
+//http://stackoverflow.com/questions/7862233/twitter-bootstrap-tabs-go-to-specific-tab-on-page-reload
+
 (function ($) {
 
   "use strict"; // jshint ;_;
@@ -44,33 +51,28 @@
 		loadAjaxContent: function($target, url, $ul) {
 			var self = this
 			  , $this = this.element	
-			  , previousTab = $ul.find('.active:last a')[0]
-			  , callback;
+			  , previousTab = $ul.find('.active:last a')[0];
 			
 			var activateTab = function() {
 				self.activate($this.parent('li'), $ul)
-//				if (! self.isFirstShowOfDefaultTab) {
-//					callback = function () {
-//						$this.trigger({
-//							type: 'shown'
-//						, relatedTarget: previousTab
-//						})
-//					}
-//				}
-//				else {
-//					//callback = function() {}
-//					callback = undefined
-//				}
 				
-				self.activate($target, $target.parent(), function () {
+				self.activate($target, $target.parent(), function () {					
 					$this.trigger({
 						type: 'shown'
 					, relatedTarget: previousTab
 					})
 				});
+				
+				if (self.isFirstShowOfDefaultTab) {
+					$target.addClass('in')
+				}
 			}
 			
-			if (self.options.cacheResponse) {
+			if (url[0]=='#') {
+				activateTab()
+				return
+			}
+			if (self.options.cacheResponse && !$target.data('errorLoading')) {
 				var trimmedHtml = $target.html().trim();
 				//make sure there's some real HTML, not just comments
 				if (trimmedHtml != '' && trimmedHtml.indexOf('<!--')!=0 )  {
@@ -92,8 +94,9 @@
 					
 					//By default (if no error handler specified), display the 404 page if we got one
 					var eventData = $._data($this[0], 'events') || $this.data('events')					
-					if (!eventData.tabAjaxError) {
+					if (!eventData || !eventData.tabAjaxError) {
 						$target.html(jqXHR.responseText)
+						$target.data('errorLoading', true)
 					}
 				})
 				.always(function() {
@@ -162,8 +165,7 @@
 			ajaxTab.showEventBound = true;
 			ajaxTab.show();
 		})
-		.on('show', selector, AjaxTab.onShowHandler)
-		//.on('tabAjaxError', function() {return true})
+		.on('show', selector, AjaxTab.onShowHandler);
 	
 	$().ready(function() {
 		//Show initial content for the tab with the "active" class, or the first tab if no tabs have the "active" class
@@ -178,13 +180,17 @@
 			//This approach (separate div for each tab pane) should theoretically allow for crossfades,
 			//although they're not currently implemented.
 			//The cacheResponse option also depends on there being a separate div for each tab pane
-			var $tabContentContainer = $($(this).attr('data-tab-content'))
-			if ($tabContentContainer.children().length == 0) {
+			var $tabContentContainer = $($(this).attr('data-tab-content')),
+			    numPanesInHtml = $tabContentContainer.children().length,
+				 defaultTabPaneAlreadyInHtml = numPanesInHtml==1
+				 
+			if (numPanesInHtml < 2) {
 				var $contentTpl = $('<div class="tab-pane fade" />');
-				for (var i=0; i < $(this).children().length; i++) {
+				//If there's already a div for the default tab, don't create a div for it
+				var i = defaultTabPaneAlreadyInHtml ? 1: 0
+				for (i; i < $(this).children().length; i++) {
 					var $content = $contentTpl.clone()
-					if (i==0) $content.addClass('in active')
-					//if (i==0) $content.addClass('active')
+					if (i==0) $content.addClass('active')
 					$tabContentContainer.append($content);
 				}
 			}
@@ -196,7 +202,7 @@
 			if (dataToggle=='ajax-tab' || dataToggle=='ajax-pill') {
 				$activeTab.ajaxTab().data('ajaxTab').showEventBound = true;
 			}
-			$activeTab.ajaxTab('show', false);
+			$activeTab.ajaxTab('show', !defaultTabPaneAlreadyInHtml);
 		})
 	});
 
